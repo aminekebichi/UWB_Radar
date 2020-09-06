@@ -11,3 +11,9 @@ from shapely.geometry import Point
 from shapely.ops import cascaded_union, unary_union
 from itertools import combinations
 
+# Generate Waterefall plot
+def waterfall(file_name, data_variable):
+    mat = loadmat(file_name)
+    data= mat[data_variable]
+    plt.imshow(data)
+    plt.show()
