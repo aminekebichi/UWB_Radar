@@ -367,3 +367,40 @@ def calculate_centroids(input_data, threshold):
     print(f"Finished calculating centroids!")
 
     return centroids
+    
+def trilateration_plot(title, window_threshold_circles, window_circles_intersection, window_circles_centroid):
+    plt.title(title)
+
+    room_points = [
+        Point(0, 0),
+        Point(4.04, 0),
+        Point(4.04, 4.04),
+        Point(0, 4.04)
+    ]
+    room = geometry.Polygon([[p.x, p.y] for p in room_points])
+    room_x, room_y = room.exterior.xy
+
+    for circle in window_threshold_circles:
+        x, y = circle.exterior.xy
+        plt.plot(x, y, "y--")
+
+    for point in window_circles_intersection:
+        plt.plot(point.x, point.y, 'mo')
+
+    # x, y = intersection_polygon.exterior.xy
+    #plt.plot(x, y, "g--")
+
+    plt.plot(window_circles_centroid.x, window_circles_centroid.y, 'bo')
+
+    plt.plot(0, 0, "ro")
+    plt.plot(0, 2.032, "ro")
+    plt.plot(1.016, 0, "ro")
+
+    plt.plot(room_x, room_y, "b--")
+
+    plt.xlim(-0.5, 4.5)
+    plt.ylim(-0.5, 4.5)
+
+    plt.xlabel("Feet side")
+    plt.ylabel("Window wall")
+    plt.show()
