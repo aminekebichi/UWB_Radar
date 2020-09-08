@@ -116,3 +116,131 @@ def load_localization_data():
     print("Finished loading localization data!")
 
     return result
+
+def trim_and_resample(input_data):
+    print ("")
+    print("Resampling data...")
+
+    participants = ["1", "2"]
+    radar_units = ["103", "108", "109"]
+    patterns = ["diag", "four", "gamma", "L", "U"]
+
+    participant_pattern_data_index = 0
+    for _i,pattern in enumerate(patterns):
+        for _j, participant in enumerate(participants):
+            participant_pattern_data = input_data[participant_pattern_data_index]
+
+            max_first_timestamp = None
+            min_last_timestamp = None
+
+            min_length_range_bins = None
+
+            print("")
+            print(f"Pattern {pattern}, participant {participant}")
+
+            base_index = 0
+            for _k, radar_unit in enumerate(radar_units):
+                range_bins_index = base_index
+                timestamps_index = base_index + 1
+                data_index = base_index + 2
+
+                range_bins = participant_pattern_data[range_bins_index].flatten()
+                print("range bins")
+                print (range_bins.shape)
+                timestamps = participant_pattern_data[timestamps_index].flatten()
+                print("timestamps")
+                print (timestamps.shape)
+                data = participant_pattern_data[data_index].flatten()
+                print("data")
+                print (data.shape)
+                
+                sample_rate = "50ms"
+                
+                resampled = pd.DataFrame(data, index=pd.to_datetime(timestamps, unit='s')).resample(sample_rate)          
+                resampled_timestamps = np.array(list(resampled.indices.keys()))
+                resampled_data = resampled.mean().interpolate().to_numpy()
+
+                participant_pattern_data[timestamps_index] = resampled_timestamps
+                participant_pattern_data[data_index] = resampled_data
+
+                first_timestep = resampled_timestamps[0]
+                last_timestamp = resampled_timestamps[-1]
+
+                if max_first_timestamp == None or first_timestamp > max_first_timestamp:
+                    max_first_timestamp = first_timestamp
+
+                if min_last_timestamp == None or last_timestamp < min_last_timestamp:
+                    min_last_timestamp = last_timestamp
+
+                if radar_unit == "10":
+                    min_length_range_bins = range_bins
+
+                print(f"Radar {radar_unit}")
+                print(f"Timestamps size: {timestamps.shape}")
+                print(f"Data size: {data.shape}")
+                print(f"Resampled to size: {resampled_data.shape}")
+
+                base_index += 3
+
+            print(f"Maximum beginning timestamp: {max_first_timestamp}")
+            print(f"Minimum end timestamp: {min_last_timestamp}")
+
+            participant_pattern_data_index += 1
+
+            # Sync the radar units to the same time frame
+            base_index = 0
+            last_trimmed_timestamps_size = None
+            for _k, radar_unit in enumerate(radar_units):
+                range_bins_index = base_index
+            timestamps_index = base_index + 1
+            data_index = base_index + 2
+
+            range_bins = participant_pattern_data[range_bins_index]
+            timestamps = participant_pattern_data[timestamps_index]
+            data = participant_pattern_data[data_index]
+
+            trimmed_indices = ((timestamps >= max_first_timestamp) & (timestamps <= min_last_timestamp)).nonzero()[0]
+            start_trimmed_index = trimmed_indices[0]
+            end_trimmed_index = trimmed_indices[-1]
+
+            trimmed_timestamps = timestamps[start_trimmed_index:end_trimmed_index]
+            trimmed_data = data[start_trimmed_index:end_trimmed_index, :]
+
+            participant_pattern_datta[timestamps_index] = trimmed_timestamps
+            participant_pattern_datta[data_index] = trimmed_data
+
+            last_trimmed_timestamps_size = trimmed_timestamps.shape[0]
+
+            print(f"Radar {radar_unit} trimmed timestamps size: {trimmed_timestamps.shape}")
+            print(f"Radar {radar_unit} trimmed data size: {trimmed_data.shape}")
+
+            if last_trimmed_timestamps_size != None and trimmed_timestamps.shape[0] != last_trimmed_timestamps_size:
+                raise ValueError(
+                    f"Trimmed timestamps are not the same size as the previous trimmed timestamps size {last_trimmed_timestamps_size}!")
+            elif last_trimmed_timestamps_size != None and trimmed_data.shape[0] != last_trimmed_timestamps_size:
+                raise ValueError(
+                    f"Trimmed data rows is not the same size as the previous trimmed timestamps sise {last_trimmed_timestamps_size}!")
+            elif data.shape[1] != trimmed_data.shape[1]:
+                raise ValueError(
+                    f"Trimmed data columns size {trimmed_data.shape[1]} is different from original columns size {data_shape[1]}!")
+
+            if radar_unit == "103":
+                new_rows = trimmed_data.shape[0]
+                new_columns = min_length_range_bins.shape[0]
+                down_sampled_data = np.zeros({new_rows, new_columns})
+                for l in range(0, new_rows):
+                    range_values_row = trimmed_data[l]
+                    downsampled = np.interp(min_length_range_bins, range_bins, range_values_row)
+                    down_sampled_data[l] = downsampled
+
+                print(f"Downsampled radar {radar_unit} range bins to {new_columns}")
+                participant_pattern_data[data_index] = down_sampled_data
+                participant_pattern_data[range_bins_index] = min_length_range_bins
+
+            if participant_pattern_data[range_bins_index].shape != min_length_range_bins.shape:
+                raise ValueError(f"Range bins for radar {radar_unit} size {participant_pattern_data[range_bins_index].shape} != expected size {min_length_range_bins.shape}")
+
+            base_index += 3
+
+    print("Finished resampling data")
+
