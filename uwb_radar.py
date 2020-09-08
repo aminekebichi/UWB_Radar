@@ -244,3 +244,126 @@ def trim_and_resample(input_data):
 
     print("Finished resampling data")
 
+def calculate_centroids(input_data, threshold):
+    print("")
+    print("Calculating centroids...")
+
+    participants = ["1", "2"]
+    radar_units = ["103", "108", "109"]
+    patterns = ["diag", "four", "gamma", "L", "U"]
+    radar_locations = [Point(0, 0), Point(0, 2.032), Point(1.016, 0)]
+
+    centroids = []
+
+    print(f"Using threshold {threshold} for localization")
+
+    participant_pattern_data_index = 0
+    for _i, pattern in enumerate(patterns):
+        for _j, participant in enumerate(participants):
+            participant_pattern_data = input_data[participant_pattern_data_index]
+
+            range_bins = participant_pattern_data[0]
+            #time_stamps = participant_pattern_data[1]
+            data_103 = participant_pattern_data[2]
+
+            total_range_bins = range_bins.shape[0]
+            participant_pattern_threshold_bins = []
+            participant_pattern_centroids = []
+
+            print("")
+            print("#########################")
+            print(f"Pattern {pattern} participant {participant}")
+            print("#########################")
+
+            window_size = 5
+            window_step = 3
+            window_start = 0
+
+            #Traverse windows
+            while True:
+                window_end = window_start + window_size
+                if window_end >= data_103.shape[0]:
+                    break
+
+
+                # print("")
+                # print(f""Thresholding scan window {window_start} -> {window_end})
+                # print(f""Thresholding scan window {timestamps{window_start}.time()} -> {timestamps{window_end}.time()}"))
+
+
+            window_threshold_bins = []
+            window_threshold_circles = []
+
+            base_index = 0
+            threshold_bins_found = True
+
+            #Traverse radar unit for each window
+            for k, radar_unit in enumerate(radar_units):
+                unit_found_threshold_bins = False
+                window_radar_threshold_bins = []
+
+                data_index = base_index + 2
+                data = participant_pattern_data[data_index]
+                radar_location = radar_locations[k]
+
+                data_for_window = data[window_start:(window_end+1)]
+
+                range_bin_window_means = np.mean(data_for_window, axis=0)
+
+                for range_bin_index  in range(0, total_range_bins):
+                    radar_value = range_bin_window_means[range_bin_index]
+                    range_bin = range_bins[range_bin_index]
+
+                    if radar_value > threshold:
+                        window_radar_threshold_bins.append(range_bin)
+
+                        circle = radar_location.buffer(range_bin)
+                        window_threshold_circles.append(circle)
+                        unit_found_threshold_bins = True
+
+                        #Closest range only
+                        break
+
+                if not unit_found_threshold_bins:
+                    threshold_bins_found = unit_found_threshold_bins
+
+                base_index += 3
+                # printf(f"Found {len{window_radara_threshold_bins}} bins above threshold for radar {radar_unit}")
+
+                window_threshold_bins.append(window_radar_threshold_bins)
+
+            if len(window_threshold_circles) != 0 and threshold_bins_found:
+                intersections = []
+                for a,b in combinations(window_threshold_circles,2):
+                    intersection = a.exterior.intersection(b.exterior)
+                    intersections.append(intersection)
+                intersections = unary_union(intersections)
+                window_circles_intersection = []
+                for geom in intersections.geoms:
+                    if geom.geom_ttype == "Point" and geom.x >= 0 and geom.y >= 0:
+                        window_circles_intersection.append(geom)
+
+                if len(window_circles_intersection) >= 3: #was != 0:
+                    intersection_polygon = geometry.Polygon([[p.x, p.y] for p in window_circles_intersection])
+                    window_circles_centroid = intersection_polygon.centroid
+
+                    x = [p.x for p in window_circles_intersection]
+                    y = [p.y for p in window_circles_intersection]
+                    window_circles_centroid = Point(sum(x) / len(window_circles_intersection), sum(y) / len(window_circles_intersection) )
+
+                    participant_pattern_centroids.append(window_circles_centroid)
+                    print(f"Found centroid at ({window_circles_centroid.x}, {window_circles_centroid.y})")
+
+                    title = f"Pattern {pattern} participant {participant} radar {radar_unit}"
+                    trilateration_plot(title, window_threshold_circles, window_circles_intersection, window_circles_centroid)
+
+            participant_pattern_threshold_bins.append(window_threshold_bins)
+
+            window_start += window_step
+
+        centroids.append(participant_pattern_centroids)
+        participant_pattern_data_index += 1
+
+    print(f"Finished calculating centroids!")
+
+    return centroids
